@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Metro Dice</title>
+  <style>
+    :root {
+      --bg: #080908;
+      --text: #d8cfb8;
+      --muted: #8b8571;
+      --accent: #c4622d;
+      --accent-hover: #d9763c;
+      --panel: rgba(14, 14, 12, 0.72);
+      --line: rgba(216, 207, 184, 0.18);
+      --ok: #9bb45f;
+      --danger: #c9473a;
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Bahnschrift, "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(ellipse at center, transparent 45%, rgba(0, 0, 0, 0.65) 100%);
+    }
+
+    /* ---------- HUD ---------- */
+    #hud {
+      position: fixed;
+      top: 14px;
+      left: 50%;
+      width: min(94vw, 560px);
+      transform: translateX(-50%);
+      padding: 10px 16px 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      pointer-events: none;
+      text-align: center;
+    }
+
+    #track {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    #track li.pip {
+      width: 12px;
+      height: 12px;
+      border: 2px solid var(--muted);
+      border-radius: 50%;
+    }
+
+    #track li.pip.done { background: var(--ok); border-color: var(--ok); }
+    #track li.pip.current { border-color: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
+    #enemy { font-size: 1rem; }
+    #enemy .power { margin-left: 10px; color: var(--accent); }
+
+    #fight {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #throws { display: flex; gap: 8px; }
+
+    .chip {
+      min-width: 44px;
+      padding: 4px 8px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .chip.preview { border-style: dashed; color: var(--muted); }
+    .chip.bonus { border-color: var(--accent); }
+
+    #total { font-size: 0.85rem; color: var(--muted); }
+    #total strong { color: var(--text); font-size: 1.1rem; }
+
+    /* ---------- Banner, message, actions ---------- */
+    #banner {
+      position: fixed;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(92vw, 640px);
+      text-align: center;
+      pointer-events: none;
+    }
+
+    #banner.title { top: 9%; }
+
+    #banner.result {
+      top: 50%;
+      transform: translate(-50%, -50%);
+      padding: 24px 28px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+
+    #banner h1 {
+      margin: 0 0 8px;
+      font-size: clamp(2.4rem, 9vw, 4.6rem);
+      font-weight: 800;
+      letter-spacing: 0.2em;
+      color: #e0b87a;
+      text-shadow: 0 0 24px rgba(196, 98, 45, 0.6), 0 3px 0 #000;
+    }
+
+    #banner h2 {
+      margin: 0 0 8px;
+      font-size: clamp(1.6rem, 6vw, 2.6rem);
+      letter-spacing: 0.16em;
+    }
+
+    #banner h2.win { color: var(--ok); }
+    #banner h2.lose { color: var(--danger); }
+    #banner p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+
+    #message {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 96px;
+      text-align: center;
+      font-size: 0.95rem;
+      color: var(--muted);
+      pointer-events: none;
+      text-shadow: 0 1px 4px #000;
+    }
+
+    #actions {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 28px;
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      padding: 0 16px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 12px 30px;
+      font: inherit;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #140d08;
+      background: var(--accent);
+      border: 2px solid var(--accent);
+      border-radius: 4px;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(196, 98, 45, 0.3);
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    button:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    button:active { transform: scale(0.97); }
+    button:focus-visible { outline: 3px solid rgba(217, 118, 60, 0.5); outline-offset: 2px; }
+
+    button.ghost {
+      color: var(--text);
+      background: rgba(14, 14, 12, 0.7);
+      border-color: var(--muted);
+      box-shadow: none;
+    }
+
+    button.ghost:hover { background: rgba(60, 50, 40, 0.8); border-color: var(--text); }
+  </style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+  <div class="vignette"></div>
+
+  <div id="banner" hidden></div>
+
+  <header id="hud" hidden>
+    <ol id="track"></ol>
+    <div id="enemy"></div>
+    <div id="fight" hidden>
+      <div id="throws"></div>
+      <div id="total" aria-live="polite"></div>
+    </div>
+  </header>
+
+  <div id="message" aria-live="polite"></div>
+  <div id="actions"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    // ---------- Constants ----------
+    const DIE_SIZE = 1;
+    const TABLE_Z = 36;            // the dice table sits far from the tunnel; the camera flies there
+    const TABLE_TOP = 1;
+    const DIE_Y = TABLE_TOP + DIE_SIZE / 2;
+
+    const START_X = -18;           // point A
+    const EXIT_X = 24;             // point B
+    const ENEMY_X = [-10, -4, 2, 8, 14];
+    const STOP_GAP = 3.2;          // how far in front of an enemy the player stops
+
+    // Strength is what the sum of all kept throws has to beat
+    const ENEMIES = [
+      { name: "Rat Swarm", strength: 15, build: buildRats },
+      { name: "Nosalis", strength: 18, build: buildNosalis },
+      { name: "Watcher", strength: 21, build: buildWatcher },
+      { name: "Bandit", strength: 24, build: buildBandit },
+      { name: "Librarian", strength: 27, build: buildLibrarian },
+    ];
+
+    // Face values in BoxGeometry material order: +x, -x, +y, -y, +z, -z.
+    // Opposite faces add up to 7, like a real die.
+    const FACES = [
+      { value: 1, normal: [1, 0, 0] },
+      { value: 6, normal: [-1, 0, 0] },
+      { value: 2, normal: [0, 1, 0] },
+      { value: 5, normal: [0, -1, 0] },
+      { value: 3, normal: [0, 0, 1] },
+      { value: 4, normal: [0, 0, -1] },
+    ];
+
+    // Pip positions per face as (col, row) on a 3x3 grid
+    const PIPS = {
+      1: [[1, 1]],
+      2: [[0, 0], [2, 2]],
+      3: [[0, 0], [1, 1], [2, 2]],
+      4: [[0, 0], [2, 0], [0, 2], [2, 2]],
+      5: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]],
+      6: [[0, 0], [2, 0], [0, 1], [2, 1], [0, 2], [2, 2]],
+    };
+
+    const rand = (min, max) => min + Math.random() * (max - min);
+    const easeOutCubic = (u) => 1 - Math.pow(1 - u, 3);
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    // ---------- Renderer, scene, camera ----------
+    const canvas = document.getElementById("scene");
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x080908);
+    scene.fog = new THREE.FogExp2(0x080908, 0.024);
+
+    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 140);
+    scene.add(new THREE.AmbientLight(0x4a4a44, 0.55));
+
+    const flickerLights = [];
+    function addFlickerLight(color, intensity, distance, x, y, z) {
+      const light = new THREE.PointLight(color, intensity, distance, 2);
+      light.position.set(x, y, z);
+      scene.add(light);
+      flickerLights.push({ light, base: intensity, phase: Math.random() * 10 });
+      return light;
+    }
+
+    // ---------- Helpers for procedural looks ----------
+    function makeGrain(base, repeatX, repeatY) {
+      const c = document.createElement("canvas");
+      c.width = c.height = 128;
+      const g = c.getContext("2d");
+      g.fillStyle = base;
+      g.fillRect(0, 0, 128, 128);
+      for (let i = 0; i < 1600; i++) {
+        const a = Math.random() * 0.25;
+        g.fillStyle = Math.random() < 0.6 ? `rgba(0,0,0,${a})` : `rgba(255,240,210,${a * 0.5})`;
+        g.fillRect(Math.random() * 128, Math.random() * 128, 2, 2);
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(repeatX, repeatY);
+      return tex;
+    }
+
+    function makeSign(text, color) {
+      const c = document.createElement("canvas");
+      c.width = 512;
+      c.height = 200;
+      const g = c.getContext("2d");
+      g.fillStyle = "#14110d";
+      g.fillRect(0, 0, 512, 200);
+      g.strokeStyle = color;
+      g.lineWidth = 10;
+      g.strokeRect(8, 8, 496, 184);
+      g.fillStyle = color;
+      g.font = "bold 110px Bahnschrift, 'Arial Narrow', sans-serif";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillText(text, 256, 106);
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(3, 1.17),
+        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c) })
+      );
+      return mesh;
+    }
+
+    const stdMat = (color, extra = {}) =>
+      new THREE.MeshStandardMaterial({ color, roughness: 0.9, metalness: 0.1, ...extra });
+
+    function part(parent, geometry, material, x = 0, y = 0, z = 0) {
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      parent.add(mesh);
+      return mesh;
+    }
+
+    const glow = (color) => new THREE.MeshBasicMaterial({ color });
+
+    // ---------- Tunnel ----------
+    function buildTunnel() {
+      const length = 66;
+      const centerX = 4;
+
+      const hull = new THREE.Mesh(
+        new THREE.CylinderGeometry(4, 4, length, 32, 1, true),
+        new THREE.MeshStandardMaterial({
+          map: makeGrain("#3b413a", 10, 16),
+          roughness: 1,
+          side: THREE.BackSide,
+        })
+      );
+      hull.rotation.z = Math.PI / 2;
+      hull.position.set(centerX, 1.2, 0);
+      scene.add(hull);
+
+      const floor = new THREE.Mesh(
+        new THREE.BoxGeometry(length, 1, 8),
+        new THREE.MeshStandardMaterial({ map: makeGrain("#2a2620", 20, 1), roughness: 1 })
+      );
+      floor.position.set(centerX, -0.5, 0);
+      scene.add(floor);
+
+      // Rails and sleepers
+      const railMat = stdMat(0x5a4a3c, { metalness: 0.5, roughness: 0.6 });
+      [-0.8, 0.8].forEach((z) => {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(length, 0.14, 0.12), railMat);
+        rail.position.set(centerX, 0.12, z);
+        scene.add(rail);
+      });
+      const sleeperMat = stdMat(0x3a2c20);
+      for (let x = centerX - length / 2 + 1; x < centerX + length / 2; x += 1.3) {
+        const sleeper = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.1, 2.4), sleeperMat);
+        sleeper.position.set(x, 0.05, 0);
+        scene.add(sleeper);
+      }
+
+      // Concrete ribs along the tunnel
+      const ribMat = stdMat(0x2c2f2a);
+      for (let x = centerX - length / 2 + 2; x < centerX + length / 2; x += 5) {
+        const rib = new THREE.Mesh(new THREE.TorusGeometry(3.95, 0.16, 8, 32), ribMat);
+        rib.rotation.y = Math.PI / 2;
+        rib.position.set(x, 1.2, 0);
+        scene.add(rib);
+      }
+
+      // Wall lamps
+      [-16, -4, 8, 20].forEach((x) => {
+        addFlickerLight(0xffa35a, 1.5, 20, x, 3.4, -2.6);
+        const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.25, 0.25), glow(0xffc27a));
+        lamp.position.set(x, 3.4, -3.5);
+        scene.add(lamp);
+      });
+
+      // Signs for point A and point B, plus the daylight door at the exit
+      const signA = makeSign("A  START", "#d9b27a");
+      signA.position.set(START_X, 2.9, -3.55);
+      scene.add(signA);
+
+      const signB = makeSign("B  SURFACE", "#cfe8ff");
+      signB.position.set(EXIT_X, 3.4, -3.5);
+      scene.add(signB);
+
+      const door = new THREE.Mesh(new THREE.PlaneGeometry(3, 3.2), glow(0xcfe8ff));
+      door.position.set(EXIT_X, 1.7, -3.7);
+      scene.add(door);
+
+      const daylight = new THREE.PointLight(0xbfe0ff, 1.6, 16, 2);
+      daylight.position.set(EXIT_X, 2, -1.5);
+      scene.add(daylight);
+    }
+
+    // ---------- Characters ----------
+    function makeHuman({ coat, maskColor = 0x2b2b2b, lens = 0xffb04a, pack = true, gun = false }) {
+      const group = new THREE.Group();
+      const dark = stdMat(0x24241f);
+      const coatMat = stdMat(coat);
+
+      const legs = [-0.14, 0.14].map((z) => {
+        const pivot = new THREE.Group();
+        pivot.position.set(0, 0.9, z);
+        part(pivot, new THREE.BoxGeometry(0.22, 0.9, 0.2), dark, 0, -0.45, 0);
+        group.add(pivot);
+        return pivot;
+      });
+
+      part(group, new THREE.BoxGeometry(0.4, 0.7, 0.6), coatMat, 0, 1.25, 0);
+      part(group, new THREE.SphereGeometry(0.2, 16, 12), stdMat(0xc9b79c), 0, 1.82, 0);
+
+      // Gas mask: snout plus two glowing lenses
+      const snout = part(group, new THREE.CylinderGeometry(0.07, 0.1, 0.22, 12), stdMat(maskColor), 0.22, 1.78, 0);
+      snout.rotation.z = -Math.PI / 2;
+      [-0.09, 0.09].forEach((z) => {
+        part(group, new THREE.SphereGeometry(0.05, 8, 8), glow(lens), 0.17, 1.87, z);
+      });
+
+      if (pack) part(group, new THREE.BoxGeometry(0.22, 0.5, 0.46), stdMat(0x3a3326), -0.3, 1.3, 0);
+
+      const arms = [-0.34, 0.34].map((z) => {
+        const pivot = new THREE.Group();
+        pivot.position.set(0, 1.5, z);
+        part(pivot, new THREE.BoxGeometry(0.14, 0.6, 0.14), coatMat, 0, -0.3, 0);
+        group.add(pivot);
+        return pivot;
+      });
+
+      if (gun) part(group, new THREE.BoxGeometry(0.95, 0.1, 0.1), dark, 0.35, 1.3, 0.2);
+
+      return { group, legs, arms };
+    }
+
+    function setWalkPose(human, swing) {
+      human.legs[0].rotation.z = swing;
+      human.legs[1].rotation.z = -swing;
+      human.arms[0].rotation.z = -swing * 0.8;
+      human.arms[1].rotation.z = swing * 0.8;
+    }
+
+    const player = makeHuman({ coat: 0x4b5a3c });
+    {
+      // Flashlight so the hero is always lit in the dark tunnel
+      const torch = new THREE.SpotLight(0xfff0c0, 1.4, 14, 0.5, 0.6, 1.5);
+      torch.position.set(0.3, 1.8, 0);
+      torch.target.position.set(7, 1, 0);
+      player.group.add(torch, torch.target);
+    }
+    scene.add(player.group);
+
+    // ---------- Enemies (built facing +x, then turned towards the player) ----------
+    function buildRats() {
+      const group = new THREE.Group();
+      const fur = stdMat(0x3a2b24);
+      for (let i = 0; i < 9; i++) {
+        const rat = new THREE.Group();
+        part(rat, new THREE.BoxGeometry(0.5, 0.22, 0.22), fur, 0, 0.11, 0);
+        part(rat, new THREE.BoxGeometry(0.4, 0.05, 0.05), fur, -0.4, 0.08, 0);
+        part(rat, new THREE.BoxGeometry(0.04, 0.04, 0.04), glow(0xff3a2a), 0.26, 0.17, 0.06);
+        part(rat, new THREE.BoxGeometry(0.04, 0.04, 0.04), glow(0xff3a2a), 0.26, 0.17, -0.06);
+        rat.position.set(rand(-0.9, 0.9), 0, rand(-0.9, 0.9));
+        rat.rotation.y = rand(-0.6, 0.6);
+        group.add(rat);
+      }
+      return group;
+    }
+
+    function buildNosalis() {
+      const group = new THREE.Group();
+      const skin = stdMat(0x6b5148);
+      const torso = part(group, new THREE.BoxGeometry(1.3, 0.9, 0.8), skin, 0, 1.1, 0);
+      torso.rotation.z = 0.25;
+      part(group, new THREE.BoxGeometry(0.6, 0.5, 0.5), skin, 0.85, 1.35, 0);
+      part(group, new THREE.BoxGeometry(0.5, 0.25, 0.3), stdMat(0x7a5e54), 1.25, 1.25, 0);
+      part(group, new THREE.BoxGeometry(0.05, 0.08, 0.08), glow(0xff3a2a), 1.1, 1.5, 0.15);
+      part(group, new THREE.BoxGeometry(0.05, 0.08, 0.08), glow(0xff3a2a), 1.1, 1.5, -0.15);
+      [[-0.4, 0.3], [-0.4, -0.3], [0.4, 0.3], [0.4, -0.3]].forEach(([x, z]) => {
+        part(group, new THREE.BoxGeometry(0.2, 0.8, 0.2), skin, x, 0.4, z);
+      });
+      [-0.5, 0.5].forEach((z) => {
+        part(group, new THREE.BoxGeometry(0.16, 1.1, 0.16), skin, 0.55, 0.9, z);
+      });
+      return group;
+    }
+
+    function buildWatcher() {
+      const group = new THREE.Group();
+      const body = stdMat(0x2d3a3a);
+      part(group, new THREE.CylinderGeometry(0.4, 0.55, 2.2, 12), body, 0, 1.3, 0);
+      part(group, new THREE.SphereGeometry(0.55, 16, 12), body, 0, 2.65, 0);
+      part(group, new THREE.CircleGeometry(0.28, 16), glow(0xffa030), 0.5, 2.7, 0).rotation.y = Math.PI / 2;
+      [-0.6, 0.6].forEach((z) => {
+        part(group, new THREE.BoxGeometry(0.12, 1.9, 0.12), body, 0.15, 1.2, z);
+      });
+      return group;
+    }
+
+    function buildBandit() {
+      return makeHuman({ coat: 0x5a4630, maskColor: 0x6a2a22, lens: 0xff3a2a, pack: false, gun: true }).group;
+    }
+
+    function buildLibrarian() {
+      const beast = makeHuman({ coat: 0x1f1f24, maskColor: 0x1a1a1a, lens: 0xff3a2a, pack: false });
+      beast.group.scale.set(1.5, 1.7, 1.5);
+      beast.arms.forEach((arm) => { arm.scale.y = 1.7; });
+      return beast.group;
+    }
+
+    let enemyHolders = [];
+    function spawnEnemies() {
+      enemyHolders.forEach((holder) => scene.remove(holder));
+      enemyHolders = ENEMIES.map((enemy, i) => {
+        const holder = new THREE.Group();
+        const body = enemy.build();
+        body.rotation.y = Math.PI;
+        holder.add(body);
+        holder.position.set(ENEMY_X[i], 0, 0);
+        scene.add(holder);
+        return holder;
+      });
+    }
+
+    // ---------- Dice table ----------
+    function buildTable() {
+      const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(26, 26),
+        new THREE.MeshStandardMaterial({ map: makeGrain("#2a2822", 8, 8), roughness: 1 })
+      );
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.set(0, 0, TABLE_Z);
+      scene.add(floor);
+
+      const wall = new THREE.Mesh(
+        new THREE.PlaneGeometry(26, 9),
+        new THREE.MeshStandardMaterial({ map: makeGrain("#3b413a", 8, 3), roughness: 1 })
+      );
+      wall.position.set(0, 4.5, TABLE_Z - 6);
+      scene.add(wall);
+
+      const metal = new THREE.MeshStandardMaterial({
+        map: makeGrain("#6a4630", 3, 2),
+        roughness: 0.75,
+        metalness: 0.35,
+      });
+      const top = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.25, 4.2), metal);
+      top.position.set(0, TABLE_TOP - 0.125, TABLE_Z);
+      top.receiveShadow = true;
+      scene.add(top);
+
+      [[-2.9, -1.8], [2.9, -1.8], [-2.9, 1.8], [2.9, 1.8]].forEach(([x, z]) => {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.22, TABLE_TOP, 0.22), stdMat(0x3a2c20));
+        leg.position.set(x, TABLE_TOP / 2, TABLE_Z + z);
+        scene.add(leg);
+      });
+
+      // Props for atmosphere
+      const crate = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.2, 1.4), stdMat(0x4a3a28));
+      crate.position.set(-5.5, 0.6, TABLE_Z - 3);
+      scene.add(crate);
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 1.5, 16), stdMat(0x6a3a22, { metalness: 0.4 }));
+      barrel.position.set(5.5, 0.75, TABLE_Z - 3.2);
+      scene.add(barrel);
+
+      // Hanging lamp
+      const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 4, 6), stdMat(0x111111));
+      cord.position.set(0, 7, TABLE_Z);
+      scene.add(cord);
+      const shade = new THREE.Mesh(
+        new THREE.ConeGeometry(0.9, 0.6, 24, 1, true),
+        stdMat(0x2a2a26, { side: THREE.DoubleSide })
+      );
+      shade.position.set(0, 5.1, TABLE_Z);
+      scene.add(shade);
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 12), glow(0xffd9a0));
+      bulb.position.set(0, 4.85, TABLE_Z);
+      scene.add(bulb);
+
+      const spot = new THREE.SpotLight(0xffd9a0, 1.9, 22, 0.75, 0.6, 1.2);
+      spot.position.set(0, 4.8, TABLE_Z);
+      spot.target.position.set(0, TABLE_TOP, TABLE_Z);
+      spot.castShadow = true;
+      spot.shadow.mapSize.set(1024, 1024);
+      scene.add(spot, spot.target);
+      addFlickerLight(0xffc27a, 0.5, 14, 0, 4.4, TABLE_Z + 1);
+    }
+
+    // ---------- Dice ----------
+    function makeFaceTexture(value) {
+      const size = 256;
+      const c = document.createElement("canvas");
+      c.width = c.height = size;
+      const g = c.getContext("2d");
+
+      g.fillStyle = "#d9d0b6";
+      g.fillRect(0, 0, size, size);
+      g.strokeStyle = "#a89f86";
+      g.lineWidth = 10;
+      g.strokeRect(5, 5, size - 10, size - 10);
+
+      g.fillStyle = value === 1 ? "#a8321c" : "#241812";
+      const pad = size * 0.24;
+      const step = (size - pad * 2) / 2;
+      PIPS[value].forEach(([col, row]) => {
+        g.beginPath();
+        g.arc(pad + col * step, pad + row * step, size * 0.085, 0, Math.PI * 2);
+        g.fill();
+      });
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.anisotropy = 4;
+      return tex;
+    }
+
+    const dieMaterials = FACES.map(({ value }) =>
+      new THREE.MeshStandardMaterial({ map: makeFaceTexture(value), roughness: 0.55 })
+    );
+    const dieGeometry = new THREE.BoxGeometry(DIE_SIZE, DIE_SIZE, DIE_SIZE);
+    const UP = new THREE.Vector3(0, 1, 0);
+
+    // Orientation that puts the face with the given value on top, with a random yaw
+    function targetQuaternion(value) {
+      const face = FACES.find((f) => f.value === value);
+      const toUp = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(...face.normal), UP);
+      const yaw = new THREE.Quaternion().setFromAxisAngle(UP, rand(0, Math.PI * 2));
+      return yaw.multiply(toUp);
+    }
+
+    const dice = [-1.3, 1.3].map((x) => {
+      const mesh = new THREE.Mesh(dieGeometry, dieMaterials);
+      mesh.castShadow = true;
+      mesh.position.set(x, DIE_Y, TABLE_Z);
+      mesh.quaternion.copy(targetQuaternion(Math.ceil(Math.random() * 6)));
+      scene.add(mesh);
+      return mesh;
+    });
+
+    // Two bounces: a big hop, then a small one
+    function hop(u) {
+      if (u < 0.65) {
+        const v = u / 0.65;
+        return 2.6 * 4 * v * (1 - v);
+      }
+      const w = (u - 0.65) / 0.35;
+      return 0.5 * 4 * w * (1 - w);
+    }
+
+    // Luck based: the values are drawn first, the animation only plays them back
+    async function rollDice() {
+      const values = dice.map(() => Math.floor(Math.random() * 6) + 1);
+      const plans = dice.map((die, i) => ({
+        from: die.position.clone(),
+        to: new THREE.Vector3((i ? 1 : -1) * 1.3 + rand(-0.4, 0.4), DIE_Y, TABLE_Z + rand(-0.6, 0.6)),
+        q0: die.quaternion.clone(),
+        q1: targetQuaternion(values[i]),
+        axis: new THREE.Vector3(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize(),
+        turns: 2 + Math.floor(Math.random() * 3),
+      }));
+
+      const base = new THREE.Quaternion();
+      const spin = new THREE.Quaternion();
+      await tween(1300, (u) => {
+        const e = easeOutCubic(u);
+        dice.forEach((die, i) => {
+          const p = plans[i];
+          die.position.lerpVectors(p.from, p.to, e);
+          die.position.y = DIE_Y + hop(u);
+          base.copy(p.q0).slerp(p.q1, e);
+          spin.setFromAxisAngle(p.axis, (1 - e) * p.turns * Math.PI * 2);
+          die.quaternion.copy(spin).multiply(base);
+        });
+      });
+      return values;
+    }
+
+    // ---------- Tweens and camera ----------
+    const tweens = [];
+    function tween(ms, fn) {
+      return new Promise((resolve) => tweens.push({ t: 0, ms, fn, resolve }));
+    }
+
+    function updateTweens(dt) {
+      for (let i = tweens.length - 1; i >= 0; i--) {
+        const tw = tweens[i];
+        tw.t += dt * 1000;
+        const u = Math.min(tw.t / tw.ms, 1);
+        tw.fn(u);
+        if (u >= 1) {
+          tweens.splice(i, 1);
+          tw.resolve();
+        }
+      }
+    }
+
+    // A shot is a look-at point plus a camera offset from it
+    const shotLook = new THREE.Vector3();
+    const shotOffset = new THREE.Vector3();
+    const camLook = new THREE.Vector3();
+
+    function aspectScale() {
+      return Math.max(1, 1.2 / camera.aspect);
+    }
+
+    function setShot(look, offset, snap = false) {
+      shotLook.copy(look);
+      shotOffset.copy(offset);
+      if (snap) {
+        camera.position.copy(look).addScaledVector(offset, aspectScale());
+        camLook.copy(look);
+        camera.lookAt(camLook);
+      }
+    }
+
+    const shotHero = () => setShot(new THREE.Vector3(START_X + 0.4, 1.4, 0), new THREE.Vector3(3.2, 0.3, 4.6));
+    const shotTable = () => setShot(new THREE.Vector3(0, 1.3, TABLE_Z), new THREE.Vector3(0, 5.4, 5.6));
+    function shotTunnel(x1, x2) {
+      setShot(new THREE.Vector3((x1 + x2) / 2, 1.5, 0), new THREE.Vector3(0, 1.4, 9.5));
+    }
+
+    function updateCamera(dt) {
+      const k = 1 - Math.exp(-dt * 2.6);
+      const goal = shotLook.clone().addScaledVector(shotOffset, aspectScale());
+      camera.position.lerp(goal, k);
+      camLook.lerp(shotLook, k);
+      camera.lookAt(camLook);
+    }
+
+    // ---------- UI ----------
+    const hudEl = document.getElementById("hud");
+    const trackEl = document.getElementById("track");
+    const enemyEl = document.getElementById("enemy");
+    const fightEl = document.getElementById("fight");
+    const throwsEl = document.getElementById("throws");
+    const totalEl = document.getElementById("total");
+    const bannerEl = document.getElementById("banner");
+    const messageEl = document.getElementById("message");
+    const actionsEl = document.getElementById("actions");
+
+    function setMessage(text) {
+      messageEl.textContent = text;
+    }
+
+    function setBanner(html, mode) {
+      bannerEl.hidden = !html;
+      bannerEl.className = mode || "";
+      bannerEl.innerHTML = html || "";
+    }
+
+    // Shows buttons and resolves with the id of the one that was clicked
+    function choose(options) {
+      return new Promise((resolve) => {
+        actionsEl.innerHTML = "";
+        options.forEach((option) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = option.label;
+          if (option.kind) button.className = option.kind;
+          button.addEventListener("click", () => {
+            actionsEl.innerHTML = "";
+            resolve(option.id);
+          });
+          actionsEl.appendChild(button);
+        });
+      });
+    }
+
+    function renderTrack(current) {
+      trackEl.innerHTML = "<li>A</li>";
+      ENEMIES.forEach((_, i) => {
+        const pip = document.createElement("li");
+        pip.className = "pip" + (i < current ? " done" : i === current ? " current" : "");
+        trackEl.appendChild(pip);
+      });
+      trackEl.insertAdjacentHTML("beforeend", "<li>B</li>");
+    }
+
+    function renderEnemy(enemy) {
+      enemyEl.innerHTML = `${enemy.name}<span class="power">Strength ${enemy.strength}</span>`;
+    }
+
+    // kept holds the sums of the throws the player has confirmed
+    let kept = [];
+    function renderThrows(enemy, slots, preview) {
+      throwsEl.innerHTML = "";
+      for (let i = 0; i < slots; i++) {
+        const chip = document.createElement("span");
+        chip.className = "chip" + (i === 3 ? " bonus" : "");
+        if (i < kept.length) {
+          chip.textContent = kept[i];
+        } else if (i === kept.length && preview != null) {
+          chip.textContent = preview;
+          chip.classList.add("preview");
+        } else {
+          chip.textContent = "–";
+        }
+        throwsEl.appendChild(chip);
+      }
+      const total = kept.reduce((a, b) => a + b, 0);
+      totalEl.innerHTML = `Total <strong>${total}</strong> · beat <strong>${enemy.strength}</strong>`;
+    }
+
+    // ---------- Game flow ----------
+    function walkTo(x) {
+      const startX = player.group.position.x;
+      const dist = Math.abs(x - startX);
+      return tween(dist * 330, (u) => {
+        player.group.position.x = startX + (x - startX) * u;
+        setWalkPose(player, Math.sin(u * dist * 3.2) * 0.6);
+      }).then(() => setWalkPose(player, 0));
+    }
+
+    function defeatEnemy(index) {
+      const holder = enemyHolders[index];
+      return tween(700, (u) => {
+        holder.rotation.z = -1.45 * easeOutCubic(u);
+      });
+    }
+
+    function resetWorld() {
+      player.group.position.set(START_X, 0, 0);
+      setWalkPose(player, 0);
+      spawnEnemies();
+      hudEl.hidden = true;
+      fightEl.hidden = true;
+      setMessage("");
+      shotHero();
+    }
+
+    async function showTitle() {
+      setBanner("<h1>Metro Dice</h1><p>Reach the surface. Five stations. Five horrors.</p>", "title");
+      await choose([{ id: "start", label: "Start" }]);
+      setBanner(null);
+      hudEl.hidden = false;
+    }
+
+    // One fight: three kept throws of 2D6 (each can be rerolled once) plus an optional bonus throw
+    async function fight(index) {
+      const enemy = ENEMIES[index];
+      kept = [];
+      fightEl.hidden = false;
+      renderThrows(enemy, 3);
+
+      shotTable();
+      setMessage(`${enemy.name} blocks the tunnel. Beat ${enemy.strength}.`);
+      await sleep(1800);
+
+      let bonusUsed = false;
+      while (true) {
+        const isBonus = kept.length >= 3;
+        const slots = isBonus ? 4 : 3;
+        renderThrows(enemy, slots);
+        setMessage(isBonus ? "Bonus throw" : `Throw ${kept.length + 1} of 3`);
+        await choose([{ id: "roll", label: isBonus ? "Roll bonus" : "Roll" }]);
+
+        let rerolled = false;
+        let values;
+        while (true) {
+          setMessage("Rolling…");
+          values = await rollDice();
+          renderThrows(enemy, slots, values[0] + values[1]);
+          setMessage(`${values[0]} + ${values[1]} = ${values[0] + values[1]}`);
+          const options = [{ id: "keep", label: "Keep" }];
+          if (!rerolled) options.push({ id: "reroll", label: "Reroll (1 left)", kind: "ghost" });
+          if ((await choose(options)) === "keep") break;
+          rerolled = true;
+        }
+
+        kept.push(values[0] + values[1]);
+        renderThrows(enemy, slots);
+
+        if (kept.length === 3 && !bonusUsed) {
+          setMessage("Fight now, or risk a bonus throw?");
+          const pick = await choose([
+            { id: "fight", label: "Fight!" },
+            { id: "bonus", label: "Bonus throw (1 left)", kind: "ghost" },
+          ]);
+          if (pick === "bonus") {
+            bonusUsed = true;
+            continue;
+          }
+          break;
+        }
+        if (kept.length >= 4) break;
+      }
+
+      const total = kept.reduce((a, b) => a + b, 0);
+      const won = total > enemy.strength;
+      setMessage("");
+      setBanner(
+        `<h2 class="${won ? "win" : "lose"}">${won ? "Enemy down" : "You fall"}</h2><p>${total} vs ${enemy.strength}</p>`,
+        "result"
+      );
+      await choose([{ id: "next", label: won ? (index < ENEMIES.length - 1 ? "Move on" : "To the surface") : "Continue" }]);
+      setBanner(null);
+      fightEl.hidden = true;
+      return won;
+    }
+
+    async function playRun() {
+      for (let i = 0; i < ENEMIES.length; i++) {
+        const enemy = ENEMIES[i];
+        renderTrack(i);
+        renderEnemy(enemy);
+
+        const stopX = ENEMY_X[i] - STOP_GAP;
+        shotTunnel(stopX, ENEMY_X[i]);
+        await walkTo(stopX);
+        await sleep(300);
+
+        if (!(await fight(i))) {
+          shotTunnel(stopX, ENEMY_X[i]);
+          setBanner(
+            `<h2 class="lose">Game over</h2><p>The ${enemy.name} ended your journey at station ${i + 1} of ${ENEMIES.length}.</p>`,
+            "result"
+          );
+          await choose([{ id: "again", label: "Restart" }]);
+          setBanner(null);
+          return;
+        }
+
+        shotTunnel(stopX, ENEMY_X[i]);
+        await sleep(900);
+        await defeatEnemy(i);
+      }
+
+      renderTrack(ENEMIES.length);
+      enemyEl.textContent = "The way is clear";
+      shotTunnel(ENEMY_X[ENEMIES.length - 1], EXIT_X);
+      await walkTo(EXIT_X - 1);
+      setBanner(`<h2 class="win">Surface reached</h2><p>You made it from A to B alive.</p>`, "result");
+      await choose([{ id: "again", label: "Play again" }]);
+      setBanner(null);
+    }
+
+    async function main() {
+      while (true) {
+        resetWorld();
+        await showTitle();
+        await playRun();
+      }
+    }
+
+    // ---------- Layout and loop ----------
+    function resize() {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    window.addEventListener("resize", resize);
+
+    buildTunnel();
+    buildTable();
+    resize();
+    resetWorld();
+    setShot(shotLook, shotOffset, true);
+
+    let last = performance.now();
+    function frame(now) {
+      const dt = Math.min((now - last) / 1000, 0.05);
+      last = now;
+      const t = now / 1000;
+
+      updateTweens(dt);
+      updateCamera(dt);
+      flickerLights.forEach(({ light, base, phase }) => {
+        light.intensity = base * (0.88 + 0.12 * Math.sin(t * (7 + phase)) * Math.sin(t * 3.1 + phase));
+      });
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+
+    main();
+  </script>
+</body>
+</html>
